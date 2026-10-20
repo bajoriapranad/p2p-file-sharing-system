@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions & binaries
+*.so
+*.o
+*.obj
+*.exe
+*.dll
+
+# Virtual Environments
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test payloads and received test files
+*.bin
+p2p_web/bt_poc/received_files/*
+!p2p_web/bt_poc/received_files/.gitkeep
+
+# Runtime uploads, history, and temporary files
+p2p_web/uploads/*
+!p2p_web/uploads/.gitkeep
+p2p_web/uploads/.manifests/
+p2p_web/uploads/chat_images/*
+!p2p_web/uploads/chat_images/.gitkeep
+p2p_web/uploads/.transfer_history.json

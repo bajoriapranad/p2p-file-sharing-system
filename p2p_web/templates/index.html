@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P File Share</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>P2P File Share</h1>
+    <p class="device-info">This device: <strong>{{ device_name }}</strong> &middot; LAN IP: <strong>{{ local_ip }}</strong>{% if bt_info and bt_info.mac_address %} &middot; BT MAC: <strong>{{ bt_info.mac_address }}</strong>{% endif %}</p>
+  </header>
+
+  <nav class="mode-nav">
+    <button type="button" id="tab-lan" class="mode-tab active" onclick="switchMode('lan')">🌐 LAN / Wi-Fi Mode</button>
+    <button type="button" id="tab-bt" class="mode-tab" onclick="switchMode('bt')">📶 Bluetooth RFCOMM Mode</button>
+  </nav>
+
+  <main>
+    <!-- Incoming Transfer Requests (Accept / Reject in both LAN and Bluetooth modes) -->
+    <section id="incoming-requests-section" class="requests-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="margin-bottom: 0;">Incoming transfer requests</h2>
+        <label style="font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; color: #334155;">
+          <input type="checkbox" id="auto-accept-toggle" onchange="toggleAutoAccept(this.checked)">
+          <span>Auto-accept incoming transfers</span>
+        </label>
+      </div>
+      <p class="text-sm text-muted" style="margin: 0 0 10px 0; font-size: 13px; color: #64748b;">
+        Incoming file requests appear here. Click <strong>Accept</strong> to receive the file or <strong>Reject</strong> to decline.
+      </p>
+      <ul id="request-list" class="list">
+        <li class="empty">No pending requests.</li>
+      </ul>
+    </section>
+
+    <div id="lan-view">
+    <section>
+      <h2>Discovered peers</h2>
+      <ul id="peer-list" class="list">
+        <li class="empty">Searching for peers on the LAN...</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>My shared files</h2>
+      <form id="add-form">
+        <input type="file" id="file-input" required>
+        <button type="submit">Add to shared folder</button>
+      </form>
+      <ul id="file-list" class="list">
+        <li class="empty">No files shared yet.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Transfer progress</h2>
+      <div id="progress-wrap">
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <span id="progress-label">No transfer in progress</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>LAN chat</h2>
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form">
+        <select id="chat-peer"><option value="">Select a peer...</option></select>
+        <input type="text" id="chat-input" placeholder="Type a message" autocomplete="off">
+        <input type="file" id="chat-image-input" accept="image/*" style="display:none;">
+        <button type="button" id="chat-image-btn" title="Send Image">📷</button>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <section id="history-section">
+      <h2>Transfer history</h2>
+      <ul id="history-list" class="list">
+        <li class="empty">No past transfers recorded.</li>
+      </ul>
+    </section>
+
+    <section id="status-section">
+      <h2>Activity log</h2>
+      <pre id="status-log">Waiting for activity...</pre>
+    </section>
+
+    <section id="analytics-section">
+      <h2>📊 Analytics Dashboard</h2>
+
+      <div class="analytics-row">
+        <div class="analytics-card">
+          <div class="analytics-card-title">🌐 Network Info</div>
+          <table class="info-table">
+            <tr><td class="info-label">Type</td><td id="net-type">—</td></tr>
+            <tr><td class="info-label">Interface</td><td id="net-iface">—</td></tr>
+            <tr><td class="info-label">IP Address</td><td id="net-ip">—</td></tr>
+          </table>
+        </div>
+        <div class="analytics-card">
+          <div class="analytics-card-title">⚙️ Transfer Config</div>
+          <table class="info-table">
+            <tr><td class="info-label">Chunk Size</td><td id="cfg-chunk">—</td></tr>
+            <tr><td class="info-label">Parallel Workers</td><td id="cfg-workers">—</td></tr>
+            <tr><td class="info-label">Live Peers</td><td id="cfg-peers">—</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <p class="analytics-sub-title">🖥️ Connected Devices</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Device</th><th>IP</th><th>Status</th>
+              <th>Data Sent</th><th>Data Received</th><th>Net Diff</th>
+              <th>Transfers</th><th>Avg Speed</th>
+            </tr>
+          </thead>
+          <tbody id="devices-tbody">
+            <tr><td colspan="8" class="empty-row">No device data yet — complete a transfer first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="analytics-sub-title">📁 Transfer Analytics</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>File</th><th>Type</th><th>Size</th><th>Direction</th>
+              <th>Peer</th><th>Speed</th><th>Duration</th>
+              <th>Best Time</th><th>Traffic</th><th>Integrity</th>
+            </tr>
+          </thead>
+          <tbody id="analytics-tbody">
+            <tr><td colspan="10" class="empty-row">No transfers recorded yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="analytics-sub-title">📡 Network Type Comparison &amp; Algorithm Impact</p>
+      <div class="table-wrap">
+        <table class="data-table comparison-table">
+          <thead>
+            <tr>
+              <th>Network Type</th><th>Typical Speed</th>
+              <th>Time per 64 KB Chunk</th><th>1 MB Transfer</th>
+              <th>UDP Broadcast</th><th>Ideal Chunk Size</th><th>Algorithm Impact</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="net-badge net-bt">Bluetooth 4.2</span></td>
+              <td>~1 Mbps</td><td>~0.5s</td><td>~8s</td>
+              <td><span class="badge badge-mismatch">❌ No</span></td>
+              <td>16 KB</td>
+              <td>No peer discovery possible. App cannot run over BT. High per-packet latency degrades parallel chunking.</td>
+            </tr>
+            <tr>
+              <td><span class="net-badge net-bt">Bluetooth 5.0</span></td>
+              <td>~2 Mbps</td><td>~0.3s</td><td>~4s</td>
+              <td><span class="badge badge-mismatch">❌ No</span></td>
+              <td>32 KB</td>
+              <td>Faster BT but still PAN, not LAN. No UDP broadcast. Each chunk HTTP overhead is proportionally high.</td>
+            </tr>
+            <tr>
+              <td><span class="net-badge net-wifi">Wi-Fi 2.4 GHz (802.11n)</span></td>
+              <td>~54 Mbps</td><td>~0.009s</td><td>~0.15s</td>
+              <td><span class="badge badge-verified">✅ Yes</span></td>
+              <td>64–256 KB</td>
+              <td>Shared medium — 4 parallel workers compete for same channel. Speed divides by active clients. 64 KB optimal.</td>
+            </tr>
+            <tr class="highlight-row">
+              <td><span class="net-badge net-wifi">Wi-Fi 5 GHz (802.11ac)</span></td>
+              <td>~300 Mbps</td><td>~0.002s</td><td>~0.03s</td>
+              <td><span class="badge badge-verified">✅ Yes</span></td>
+              <td>256 KB – 1 MB</td>
+              <td>Less channel congestion. 4 workers fully utilized. Ideal for this app. Larger chunks reduce HTTP overhead.</td>
+            </tr>
+            <tr>
+              <td><span class="net-badge net-eth">Ethernet 100 Mbps</span></td>
+              <td>~100 Mbps</td><td>~0.005s</td><td>~0.08s</td>
+              <td><span class="badge badge-verified">✅ Yes</span></td>
+              <td>256 KB – 1 MB</td>
+              <td>Dedicated per-link bandwidth. 4 workers never compete. Stable, consistent speed across all transfers.</td>
+            </tr>
+            <tr>
+              <td><span class="net-badge net-eth">Ethernet 1 Gbps</span></td>
+              <td>~1000 Mbps</td><td>~0.0005s</td><td>~0.008s</td>
+              <td><span class="badge badge-verified">✅ Yes</span></td>
+              <td>1–4 MB</td>
+              <td>Maximum throughput. HTTP overhead negligible. Bottleneck shifts to disk I/O. More workers would help here.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    </div><!-- /#lan-view -->
+
+    <!-- ==================== BLUETOOTH RFCOMM MODE ==================== -->
+    <div id="bt-view" style="display: none;">
+      <!-- Bluetooth Adapter & Listener Status Card -->
+      <section class="bt-card">
+        <div class="bt-header-row">
+          <h2>📶 Bluetooth Adapter &amp; Listener Status</h2>
+          <span id="bt-status-badge" class="badge badge-idle">Checking...</span>
+        </div>
+        <div class="bt-status-grid">
+          <div class="bt-stat-box">
+            <span class="bt-stat-label">Platform Support</span>
+            <span id="bt-platform-val" class="bt-stat-val">{{ bt_info.platform }} (AF_BTH)</span>
+          </div>
+          <div class="bt-stat-box">
+            <span class="bt-stat-label">Local Radio MAC</span>
+            <span id="bt-mac-val" class="bt-stat-val">{{ bt_info.mac_address or 'Not detected' }}</span>
+          </div>
+          <div class="bt-stat-box">
+            <span class="bt-stat-label">RFCOMM Channel</span>
+            <span id="bt-channel-val" class="bt-stat-val">Channel 4</span>
+          </div>
+          <div class="bt-stat-box">
+            <span class="bt-stat-label">SDP Service Record</span>
+            <span id="bt-sdp-val" class="bt-stat-val">UUID 00001101...</span>
+          </div>
+        </div>
+
+        <div class="bt-listener-controls">
+          <button type="button" id="bt-start-btn" onclick="startBtReceiver()" class="bt-btn-primary">▶ Start Bluetooth Receiver</button>
+          <button type="button" id="bt-stop-btn" onclick="stopBtReceiver()" class="bt-btn-danger" style="display:none;">⏹ Stop Receiver</button>
+          <label class="bt-checkbox-label">
+            <input type="checkbox" id="bt-receiver-mock-toggle">
+            <span>Local Test Simulation (Loopback without 2nd device)</span>
+          </label>
+        </div>
+        <p id="bt-listener-message" class="bt-help-text">Click "Start Bluetooth Receiver" to listen for incoming RFCOMM connections from paired devices.</p>
+      </section>
+
+      <!-- Bluetooth Send File Card -->
+      <section class="bt-card">
+        <h2>📤 Send File via Bluetooth RFCOMM</h2>
+        <form id="bt-send-form" onsubmit="event.preventDefault(); sendBtFile();">
+          <div class="form-group">
+            <label for="bt-peer-select">Target Paired Device:</label>
+            <div class="input-with-btn">
+              <select id="bt-peer-select" onchange="onBtPeerSelectChange()">
+                <option value="">-- Choose paired device or enter manual MAC --</option>
+              </select>
+              <button type="button" onclick="loadBtDevices()" title="Refresh paired devices">🔄 Scan Paired</button>
+            </div>
+          </div>
+
+          <div class="form-group" id="bt-manual-mac-group">
+            <label for="bt-target-mac">Or Manual Bluetooth MAC Address (12 hex digits or XX:XX:XX:XX:XX:XX):</label>
+            <input type="text" id="bt-target-mac" placeholder="e.g. 58:96:1D:XX:XX:XX or 58961DXXXXXX">
+          </div>
+
+          <div class="form-group">
+            <label for="bt-file-source">File to Send:</label>
+            <select id="bt-file-source" onchange="onBtFileSourceChange()">
+              <option value="shared">Select from My Shared Files</option>
+              <option value="upload">Upload New Local File to Send</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="bt-shared-file-group">
+            <label for="bt-shared-file-select">Choose Shared File:</label>
+            <select id="bt-shared-file-select">
+              <option value="">-- No files available in shared folder --</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="bt-upload-file-group" style="display: none;">
+            <label for="bt-upload-file-input">Choose Local File:</label>
+            <input type="file" id="bt-upload-file-input">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-half">
+              <label for="bt-send-channel">RFCOMM Channel:</label>
+              <input type="number" id="bt-send-channel" value="4" min="1" max="30">
+            </div>
+            <div class="form-group col-half bt-checkbox-wrap">
+              <label class="bt-checkbox-label">
+                <input type="checkbox" id="bt-send-mock-toggle">
+                <span>Simulation / Loopback Mode</span>
+              </label>
+              <small class="bt-dim-text">Simulates transfer locally without second laptop</small>
+            </div>
+          </div>
+
+          <button type="submit" id="bt-send-btn" class="bt-btn-primary">🚀 Send File over Bluetooth</button>
+        </form>
+      </section>
+
+      <!-- Live Transfer Progress & Integrity Monitor -->
+      <section class="bt-card" id="bt-transfer-section">
+        <div class="bt-header-row">
+          <h2>📊 Live Transfer &amp; Integrity Monitor</h2>
+          <span id="bt-transfer-state-pill" class="badge badge-idle">Idle</span>
+        </div>
+
+        <div id="bt-mock-warning" class="bt-mock-banner" style="display: none;">
+          ⚠️ SIMULATED LOCAL LOOPBACK - NOT ACTUAL BLUETOOTH HARDWARE TRANSFER
+        </div>
+
+        <div class="bt-transfer-meta">
+          <div class="meta-item"><span class="meta-label">File:</span> <strong id="bt-tx-file">—</strong></div>
+          <div class="meta-item"><span class="meta-label">Size:</span> <span id="bt-tx-size">—</span></div>
+          <div class="meta-item"><span class="meta-label">Direction:</span> <span id="bt-tx-direction">—</span></div>
+          <div class="meta-item"><span class="meta-label">Peer:</span> <span id="bt-tx-peer">—</span></div>
+        </div>
+
+        <div class="progress-track" style="margin: 14px 0 6px 0;">
+          <div id="bt-progress-fill" class="progress-fill" style="width: 0%;"></div>
+        </div>
+        <div class="bt-progress-numbers">
+          <span id="bt-progress-pct">0%</span>
+          <span id="bt-progress-bytes">0 / 0 bytes</span>
+        </div>
+
+        <div class="bt-metrics-grid">
+          <div class="bt-metric-card">
+            <span class="metric-title">Transfer Speed</span>
+            <span id="bt-metric-speed" class="metric-val">0 KB/s</span>
+          </div>
+          <div class="bt-metric-card">
+            <span class="metric-title">Throughput</span>
+            <span id="bt-metric-mbps" class="metric-val">0 Mbps</span>
+          </div>
+          <div class="bt-metric-card">
+            <span class="metric-title">Elapsed Time</span>
+            <span id="bt-metric-time" class="metric-val">0.0s</span>
+          </div>
+          <div class="bt-metric-card">
+            <span class="metric-title">Integrity Check</span>
+            <span id="bt-metric-integrity" class="metric-val badge badge-idle">—</span>
+          </div>
+        </div>
+
+        <div class="bt-hash-box">
+          <div class="hash-row">
+            <span class="hash-label">SHA-256 Digest:</span>
+            <span id="bt-hash-val" class="hash-code">Not yet computed</span>
+          </div>
+        </div>
+
+        <div class="bt-transfer-actions">
+          <button type="button" id="bt-cancel-btn" onclick="cancelBtTransfer()" class="bt-btn-danger" style="display: none;">✖ Cancel Transfer</button>
+          <span id="bt-live-message" class="bt-status-note">No transfer in progress.</span>
+        </div>
+      </section>
+
+      <!-- Bluetooth Received Files -->
+      <section class="bt-card">
+        <h2>📥 Received Files (Shared Storage)</h2>
+        <ul id="bt-received-list" class="list">
+          <li class="empty">No received files yet.</li>
+        </ul>
+      </section>
+
+      <!-- Bluetooth Compatibility, Pairing & Requirements Guide -->
+      <section class="bt-card bt-guide-card">
+        <h2>ℹ️ Bluetooth Classic RFCOMM Prerequisites &amp; Limitations</h2>
+        <div class="guide-content">
+          <div class="guide-item">
+            <strong>1. Windows Native Stack:</strong>
+            <p>This application uses native Windows Winsock RFCOMM sockets (<code>AF_BTH</code>). It operates entirely peer-to-peer without internet, Wi-Fi router, or hotspot.</p>
+          </div>
+          <div class="guide-item">
+            <strong>2. Pairing Requirement:</strong>
+            <p>Bluetooth Classic requires the two devices to be paired in <strong>Windows Settings &gt; Bluetooth &amp; devices</strong> before a socket connection can be established.</p>
+          </div>
+          <div class="guide-item">
+            <strong>3. Remote Device Service:</strong>
+            <p>The receiving laptop must start the RFCOMM listener service. Stock phones (like Android or iPhone) do not expose an open RFCOMM server for this protocol unless a custom companion client is running.</p>
+          </div>
+          <div class="guide-item">
+            <strong>4. Simulated Loopback Mode:</strong>
+            <p>When a second Windows laptop is not physically present, the "Simulation / Loopback Mode" can be toggled to validate framing, chunking, and SHA-256 integrity verification locally.</p>
+          </div>
+        </div>
+      </section>
+    </div><!-- /#bt-view -->
+  </main>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
